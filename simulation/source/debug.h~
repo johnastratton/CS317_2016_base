@@ -1,0 +1,35 @@
+/*
+Deterministic simulator for zebrafish segmentation
+Copyright (C) 2012 Ahmet Ay, Jack Holland, Adriana Sperlea
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#ifndef DEBUG_H
+#define DEBUG_H
+
+#include "structs.h"
+
+bool is_nan(double);
+void print_cl(con_levels&);
+void print_cl_at(con_levels&, int);
+void print_cl_when_nonzero(con_levels&);
+void print_cl_when_same(con_levels&);
+void print_con(con_levels&, int);
+void print_con_at(con_levels&, int, int);
+void print_cl_nonzero_at(con_levels&, int);
+void print_cl_at_for(con_levels&, int, int);
+
+#endif
+

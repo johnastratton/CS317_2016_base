@@ -1,0 +1,136 @@
+/*
+Deterministic simulator for zebrafish segmentation
+Copyright (C) 2012 Ahmet Ay, Jack Holland, Adriana Sperlea
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#ifndef SIM_H
+#define SIM_H
+
+#include "structs.h"
+
+using namespace std;
+
+void simulate_all_params(input_params&, rates&, rate_positions&, sim_data&, input_file_data&, mutant_data[], ofstream*, char**, ofstream*);
+void simulate_param_set(int, input_params&, rates&, rate_positions&, sim_data&, input_file_data&, mutant_data[], ofstream*, char**, ofstream*);
+bool run_sim(int, sim_data&, rates&, features&, features&, mutant_data[], int, bool, char*, int);
+bool model(sim_data&, rates&, con_levels&);
+bool any_less_0(con_levels&, int, int, int, int);
+bool check_propensities(con_levels&, rates&, int, double);
+void split(sim_data&, con_levels&, int);
+void record_psm_positions(sim_data&, int);
+void protein_synthesis(sim_data&, rates&, con_levels&, st_context&, int[], int[]);
+void dimer_proteins(sim_data&, rates&, con_levels&, st_context&);
+void mRNA_synthesis(sim_data&, rates&, con_levels&, st_context&, int[], int[], int[]);
+void neighbors_1d(sim_data&, int[], int);
+void neighbors_2d(sim_data&, int[], int, int);
+double transcription(rates&, con_levels&, int, int, double, double);
+
+// Dimer interactions for protein calculations
+inline void dim_int (di_args& a, di_indices dii) {
+	double* r = a.rs.rate;
+	double*** c = a.cl.c;
+	int tp = a.stc.time_prev;
+	int cp = a.stc.cell_prev;
+	
+	a.dimer_effects[dii.delay_her] =
+		a.dimer_effects[dii.delay_her]
+		- r[dii.rate_association] * c[dii.con_protein_self][tp][cp] * c[dii.con_protein_other][tp][cp]
+		+ r[dii.rate_dissociation] * c[dii.con_dimer][tp][cp];
+}
+
+// Protein synthesis calculations for Her proteins
+inline void con_protein_her (cp_args& a, cph_indices i) {
+	double* r = a.rs.rate;
+	double*** c = a.cl.c;
+	int tc = a.stc.time_cur;
+	int tp = a.stc.time_prev;
+	int cc = a.stc.cell_cur;
+	int cp = a.stc.cell_prev;
+	
+	c[i.con_protein][tc][cc] =
+		c[i.con_protein][tp][cp]
+		+ a.sd.step_size * ((tc > a.pdelays[i.delay_protein]
+			? r[i.rate_synthesis] * c[i.con_mrna][tc - a.pdelays[i.delay_protein]][a.pdelays_cell[i.delay_protein]]
+			: 0)
+		- r[i.rate_degradation] * c[i.con_protein][tp][cp]
+		- 2 * r[i.rate_association] * square(c[i.con_protein][tp][cp])
+		+ 2 * r[i.rate_dissociation] * c[i.con_dimer][tp][cp]
+		+ a.dimer_effects[i.delay_her]);
+}
+
+inline void con_protein_dm (cp_args& a, cpd_indices i) {
+	double* r = a.rs.rate;
+	double*** c = a.cl.c;
+	int tc = a.stc.time_cur;
+	int tp = a.stc.time_prev;
+	int cc = a.stc.cell_cur;
+	int cp = a.stc.cell_prev;
+	
+	c[i.con_protein][tc][cc] =
+		c[i.con_protein][tp][cp]
+		+ a.sd.step_size * ((tc > a.pdelays[i.delay]
+			? r[i.rate_synthesis] * c[i.con_mrna][tc - a.pdelays[i.delay]][a.pdelays_cell[i.delay]]
+			: 0)
+		- r[i.rate_degradation] * c[i.con_protein][tp][cp]);
+}
+
+// Dimer concentrations
+inline void con_dimer (cd_args& a, int con, int offset, cd_indices i) {
+	double* r = a.rs.rate;
+	double*** c = a.cl.c;
+	int tc = a.stc.time_cur;
+	int tp = a.stc.time_prev;
+	int cc = a.stc.cell_cur;
+	int cp = a.stc.cell_prev;
+	
+	c[con][tc][cc] =
+		c[con][tp][cp]
+		+ a.sd.step_size * (r[i.rate_association + offset] * c[i.con_protein][tp][cp] * c[i.con_protein + offset][tp][cp]
+			- r[i.rate_dissociation + offset] * c[con][tp][cp]
+			- r[i.rate_degradation + offset] * c[con][tp][cp]);
+}
+
+// Return the cell index of a previous rate accounting for cell divisions
+inline int index_with_splits (int delay, int i, int cells, int split_steps, int split_diff) {
+	int offset = 0;
+	if (delay > split_diff) {
+		offset += 1;
+		delay -= split_diff;
+		offset += delay / split_steps;
+	}
+	
+	return (i - offset + cells) % cells;
+}
+
+// Generates a random double between the ranges specified in the given two element array
+inline double make_random(double range[]) {
+	return double((range[1] - range[0]) * rand() / (RAND_MAX + 1.0) + range[0]);
+}
+
+inline double average_1d (con_levels& cl, int time, int cell[], int left, int right) {
+	if (time > 0) {
+		return (cl.c[pdelta][time][cell[left]] + cl.c[pdelta][time][cell[right]]) / 2;
+	} else {
+		return 0;
+	}
+}
+
+inline double average_2d (con_levels& cl, int isd[], int id, int ntop, int nbot, int ntl, int nbl, int ntr, int nbr) {
+	return (cl.c[pdelta][id][isd[ntop]] + cl.c[pdelta][id][isd[nbot]] + cl.c[pdelta][id][isd[ntl]] + cl.c[pdelta][id][isd[nbl]] + cl.c[pdelta][id][isd[ntr]] + cl.c[pdelta][id][isd[nbr]]) / 6;
+}
+
+#endif
+

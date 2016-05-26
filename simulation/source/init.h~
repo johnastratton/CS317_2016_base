@@ -1,0 +1,48 @@
+/*
+Deterministic simulator for zebrafish segmentation
+Copyright (C) 2012 Ahmet Ay, Jack Holland, Adriana Sperlea
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#ifndef INIT_H
+#define INIT_H
+
+#include <fstream>
+
+#include "structs.h"
+
+using namespace std;
+
+void init_terminal_colors();
+void free_terminal_colors();
+void accept_params(int, char**, input_params&);
+void ensure_nonempty(const char*, const char*);
+void set_default_files(input_params&);
+void check_sim_size(input_params&);
+void init_seed(input_params&);
+void read_sim_params(input_params&, input_file_data&, input_file_data&);
+ofstream* create_passed_file(input_params&);
+void delete_passed_file(ofstream*);
+char** create_cons_filenames(input_params&);
+void delete_cons_filenames(char**);
+ofstream* create_features_file(input_params&);
+void delete_features_file(ofstream*);
+mutant_data* create_mutant_data();
+void delete_mutant_data(mutant_data[]);
+void adjust_rates_per_cell(rates&, rate_positions&, sim_data&);
+void check_num_params_valid(input_params&, char*);
+
+#endif
+

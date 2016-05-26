@@ -1,0 +1,180 @@
+/*
+Deterministic simulator for zebrafish segmentation
+Copyright (C) 2012 Ahmet Ay, Jack Holland, Adriana Sperlea
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/*
+The program simulates the behavior of the zebrafish segmentation clock for two cells,
+through a matematical model using delay differential equations.
+To solve the equations, the program uses Euler's method, with an adjustable stepsize.
+The program tries to find parameter sets which replicate the behavior of the system in wild type
+and several mutants.
+*/
+
+#include "feats.h"
+#include "debug.h"
+
+void osc_features (sim_data& sd, con_levels& cl, features& feat, bool wild) {
+	/*
+	 Calculates the oscillation features: period, amplitude, and peak to trough ratio for a set of concentration levels.
+	 The values are calculated using the last peak and trough of the oscillations, since the amplitude of the first few oscillations can be slightly unstable.
+	 For the wild type, the peak and trough at the middle of the graph are also calculated in order to ensure that the oscillations are sustained.
+	*/
+	
+	int post_start = sd.active_thresh_record[0] + sd.width_thresh + 1;
+	int cell = 0;
+	int last_cell = 0;
+	int next_cell = 0;
+	double time_since_split = 0;
+	double cur_max_trough = 0;
+	double last_max_trough = 0;
+	double cur_max_con = 0;
+	double cur_min_con = 0;
+	
+	double time_elapsed = sd.step_size;
+	int temp = 0;
+	int pos = post_start;
+	bool increment = false;
+	double cur_max_con2 = 0.0;
+	double cur_min_con2 = 0.0;
+	
+	for (int j = 1; j < sd.time_steps - 1; j++) {
+		time_since_split += sd.step_size;
+		bool did_split = time_since_split >= sd.time_total - sd.step_size;
+		if (did_split) {
+			last_cell = cell;
+			cell = next_cell;
+			time_since_split = 0;
+		} else {
+			bool will_split = time_since_split + sd.step_size >= sd.time_total;
+			if (will_split) {
+				next_cell = (cell + 1) % sd.cells_total;
+			}
+		}
+		
+		double** mh1s = cl.c[mh1];
+		// check if the current point is a peak
+		if (mh1s[j][cell] > mh1s[j - 1][last_cell] && mh1s[j][cell] > mh1s[j + 1][next_cell]) {
+			last_max_trough = cur_max_trough;
+			cur_max_trough = j;
+			cur_max_con = mh1s[j][cell];
+		}
+		// check if the current point is a trough
+		if (mh1s[j][cell] < mh1s[j - 1][last_cell] && mh1s[j][cell] < mh1s[j + 1][next_cell]) {
+			cur_min_con = mh1s[j][cell];
+		}
+		
+		if (wild) {
+			// calculate the peak and trough at the middle of the graph
+			time_elapsed += sd.step_size;
+			if (time_elapsed >= sd.time_total - sd.step_size) {
+				temp = pos;
+				pos++;
+				time_elapsed = 0;
+				if (pos >= sd.cells_total) {
+					pos = 0;
+				}
+				increment = true;
+			}
+			if (increment) {
+				if (mh1s[j - 1][pos] < mh1s[j][pos] && mh1s[j][pos] > mh1s[j + 1][temp]) {
+					cur_max_con2 = mh1s[j][pos];
+				}
+				if (mh1s[j - 1][pos] > mh1s[j][pos] && mh1s[j][pos] < mh1s[j + 1][temp]) {
+					cur_min_con2 = mh1s[j][pos];
+				}
+				increment = false;
+			} else {
+				if (mh1s[j - 1][pos] < mh1s[j][pos] && mh1s[j][pos] > mh1s[j + 1][pos]) {
+					cur_max_con2 = mh1s[j][pos];
+				}
+				if(mh1s[j - 1][pos] > mh1s[j][pos] && mh1s[j][pos] < mh1s[j + 1][pos]) {
+					cur_min_con2 = mh1s[j][pos];
+				}
+			}
+		}
+	}
+	
+	feat.period = (cur_max_trough - last_max_trough) * sd.step_size;
+	feat.amplitude =  cur_max_con - cur_min_con;
+	feat.peaktotrough1 = zero_if_nan(cur_max_con / cur_min_con);
+	feat.peaktotrough2 = zero_if_nan(cur_max_con2 / cur_min_con2);
+	feat.consistent = avg_pearson(sd, cl, post_start) > 0.8;
+}
+
+double avg_pearson (sim_data& sd, con_levels& cl, int post_start) {
+	double pearson_sum = 0;
+	
+	for (int k = post_start + 1; k < sd.cells_total; k++) {
+		pearson_sum += pearson_correlation(sd, cl, post_start, k);
+	}
+	
+	return zero_if_nan(pearson_sum / (sd.cells_total - post_start - 1));
+}
+
+// Calculates the pearson correlation of mh1 between two given cells
+double pearson_correlation (sim_data& sd, con_levels& cl, int cell1, int cell2) {
+	double sigma_x = 0;
+	double sigma_x2 = 0;
+	double sigma_y = 0;
+	double sigma_y2 = 0;
+	double sigma_xy = 0;
+	double time_elapsed = 0;
+	
+	for (int j = 1; j < sd.time_steps; j++) {
+		time_elapsed += sd.step_size;
+		
+		if (time_elapsed >= sd.time_total - sd.step_size) {
+			cell1 = (cell1 + 1) % sd.cells_total;
+			cell2 = (cell2 + 1) % sd.cells_total;
+			time_elapsed = 0;
+		}
+		
+		double x = cl.c[mh1][j][cell1];
+		double y = cl.c[mh1][j][cell2];
+		sigma_x += x;
+		sigma_x2 += x * x;
+		sigma_y += y;
+		sigma_y2 += y * y;
+		sigma_xy += x * y;
+	}
+	
+	return (sd.time_steps * sigma_xy - sigma_x * sigma_y) / sqrt((sd.time_steps * sigma_x2 - sigma_x * sigma_x) * (sd.time_steps * sigma_y2 - sigma_y * sigma_y));
+}
+
+bool test_wildtype (features& feat, features& wtfeat) {
+	return feat.consistent && feat.peaktotrough2 >= 1.5 && feat.peaktotrough1 >= 1.5 && feat.peaktotrough2 / feat.peaktotrough1 <= 1.5;
+}
+
+bool test_h1_mutant (features& feat, features& wtfeat) {
+	return feat.period / wtfeat.period > 0.97 && feat.period / wtfeat.period < 1.03;
+}
+
+bool test_h7_mutant (features& feat, features& wtfeat) {
+	return feat.period / wtfeat.period > 0.97 && feat.period / wtfeat.period < 1.03;
+}
+
+bool test_h13_mutant (features& feat, features& wtfeat) {
+	return feat.period / wtfeat.period > 1.03 && feat.period / wtfeat.period < 1.09;
+}
+
+bool test_h7h13_mutant (features& feat, features& wtfeat) {
+	return feat.period / wtfeat.period > 1.03 && feat.period / wtfeat.period < 1.09;
+}
+
+bool test_delta_mutant (features& feat, features& wtfeat) {
+	return feat.period / wtfeat.period > 1.04 && feat.period / wtfeat.period < 1.30;
+}

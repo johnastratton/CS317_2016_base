@@ -1,0 +1,225 @@
+/*
+Deterministic simulator for zebrafish segmentation
+Copyright (C) 2012 Ahmet Ay, Jack Holland, Adriana Sperlea
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#include <cerrno>
+#include <cstring>
+#include <iostream>
+#include <sys/stat.h>
+
+#include "file-io.h"
+#include "main.h"
+#include "macros.h"
+#include "structs.h"
+
+using namespace std;
+
+extern terminal* term;
+
+void create_dir (char* dir) {
+	cout << term->blue << "Creating " << term->reset << dir << " directory if necessary . . . ";
+	if (mkdir(dir, 0755) != 0 && errno != EEXIST) {
+		cout << term->red << "Couldn't create " << dir << " directory!" << term->reset << endl;
+		exit(1);
+	}
+	term->done();
+}
+
+void open_file (ofstream* file_pointer, char* file_name) {
+	try {
+		cout << term->blue << "Creating " << term->reset << file_name << " . . . ";
+		file_pointer->open(file_name, fstream::out);
+	} catch (ofstream::failure) {
+		cout << term->red << "Couldn't create " << file_name << "!" << term->reset << endl;
+		exit(1);
+	}
+	term->done();
+}
+
+void read_file (input_file_data* ifd) {
+	// Open the file for reading and print header
+	FILE* file_pt;
+	long long_size;
+	size_t result;
+	static const int MB = 1048576;
+	
+	file_pt = fopen(ifd->filename, "rb");
+	if (file_pt == NULL) {
+		cout << term->red << "Couldn't open file " << ifd->filename << "!" << term->reset << endl;
+		exit(1);
+	}
+	
+	// Obtain file size and check that it is under 400MB
+	fseek(file_pt, 0, SEEK_END);
+	long_size = ftell(file_pt);
+	if (long_size > 400 * MB) {
+		cout << term->red << "input file is too large (400MB limit)!" << term->reset;
+		exit(1);
+	}	
+	rewind(file_pt);
+	
+	// Allocate memory to contain the whole file
+	ifd->buffer = (char*)malloc(sizeof(char) * long_size + 1);
+	if (ifd->buffer == NULL) {
+		term->no_memory();
+		exit(2);
+	}
+	
+	// Copy the file into the buffer
+	result = fread(ifd->buffer, 1, long_size, file_pt);
+	if ((int)result != long_size) {
+		cout << term->red << "Reading error" << term->reset << endl;
+		exit(3);
+	}
+	ifd->buffer[long_size] = '\0';
+	
+	// The whole file is now loaded in the memory buffer
+	fclose(file_pt);
+}
+
+inline bool not_EOL (char c) {
+	return c != '\n' && c != '\0';
+}
+
+void print_osc_features (ofstream* file_features, features* feat) {
+	*file_features << feat->period << "," << feat->amplitude << "," << feat->peaktotrough1 << ",";
+}
+
+void print_passed (ofstream* file_passed, rates& rs) {
+	*file_passed << rs.rate[0];
+	for (int i = 1; i < size_rates; i++) {
+		*file_passed << "," << rs.rate[i];
+	}
+	*file_passed << endl;
+}
+
+void store_filename (char** field, const char* value) {
+	*field = (char*)malloc(strlen(value) + 1);
+	if (field == NULL) {
+		term->no_memory();
+		exit(2);
+	}
+	strcpy(*field, value);
+}
+
+void store_rates (rates& rs, input_file_data& params_data, int seed) {
+	double parameters[size_rates];
+	ofstream seedfile;
+	if (params_data.filename == NULL) {
+		seedfile.open("seed.txt", fstream::out);
+	}
+	if (params_data.filename == NULL) { // if there is no input file, generate a random set and print the seed to a file so that results can be replicated later
+		generate_set(parameters);
+		seedfile << seed << endl;
+	} else { // if an input file was specified, parse a line from it
+		parse_param_line(parameters, params_data.buffer, params_data.index);
+	}
+	
+	for (int j = 0; j < size_rates; j++) { // fill the rates structure
+		rs.rate[j] = parameters[j];
+	}
+}
+
+void store_rate_positions (rate_positions* rps, bool has_pos_params, input_file_data* pos_params_data) {
+	if (has_pos_params) {
+		double positions[4];
+		pos_param pp;
+		while (pos_params_data->buffer[pos_params_data->index] != '\0') {
+			parse_pos_param_line(&pp, positions, pos_params_data->buffer, pos_params_data->index);
+			if (!(pp.count == 2 || pp.count == 4)) {
+				cout << term->red << "Each parameter position must include 2 or 4 points!" << term->reset << endl;
+				exit(1);
+			}
+			rps->adjusted[pp.rate] = true;
+			rps->num_points[pp.rate] = pp.count;
+			rps->points[pp.rate] = new double[pp.count];
+			for (int i = 0; i < pp.count; i++) {
+				rps->points[pp.rate][i] = positions[i];
+			}
+		}
+	}
+}
+
+void parse_param_line (double* params, char* buffer_line, int& index_buffer) {
+	char buffer_digits[50] = {'\0'};
+	int index_digits = 0;
+	int index_params = 0;
+	
+	int i;
+	for (i = index_buffer; not_EOL(buffer_line[i]); i++) {
+		if (buffer_line[i] == ',') {
+			buffer_digits[index_digits + 1] = '\0';
+			params[index_params++] = atof(buffer_digits);
+			for (int j = 0; j < index_digits; j++) {
+				buffer_digits[j] = '\0';
+			}
+			index_digits = 0;
+		} else {
+			buffer_digits[index_digits++] = buffer_line[i];
+		}
+	}
+	index_buffer = i + 1;
+	params[index_params] = atof(buffer_digits);
+}
+
+void parse_pos_param_line (pos_param* pp, double* positions, char* buffer_line, int& index_buffer) {
+	/*char buffer_digit[50];
+	buffer_digit[0] = '\0';
+	int index_positions = 0;
+	
+	for (int i = index_positions; not_EOL(buffer_line[i]); i++) {
+		
+	}*/
+}
+
+void print_concentrations (int set_num, char* filename_cons, int print_gran, sim_data& sd, con_levels& cl) {
+	int strlen_set_num = log10(set_num + 1) + 1;
+	char* str_set_num = (char*)malloc(strlen_set_num + 1);
+	sprintf(str_set_num, "%d", set_num);
+	char* filename_set = (char*)malloc(sizeof(char) * (strlen(filename_cons) + strlen("set_") + strlen_set_num + strlen(".txt") + 1));
+	sprintf(filename_set, "%sset_%s.txt", filename_cons, str_set_num);
+	ofstream file_cons;
+	open_file(&file_cons, filename_set);
+	free(filename_set);
+	free(str_set_num);
+	
+	double time_elapsed = 0;
+	int start = 0;
+	file_cons << sd.cells_total << " " << sd.height << endl;
+	for (int j = 0; j < sd.time_steps; j += print_gran) {
+		file_cons << j << " ";
+		time_elapsed += sd.step_size;
+		
+		if (time_elapsed >= sd.time_total - sd.step_size) {
+			 start = (start + 1) % sd.cells_total;
+			 time_elapsed = 0;
+		}
+		
+		int pos = start;
+		for (int i = 0; i < sd.cells_total; i++) {
+			file_cons << cl.c[mh12][j][pos] << " ";
+			pos = (pos + 1) % sd.cells_total;
+		}
+		file_cons << endl;
+	}
+}
+
+void close_if_open (ofstream* file) {
+	if (file->is_open()) {
+		file->close();
+	}
+}

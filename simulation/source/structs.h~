@@ -1,0 +1,425 @@
+/*
+Deterministic simulator for zebrafish segmentation
+Copyright (C) 2012 Ahmet Ay, Jack Holland, Adriana Sperlea
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#ifndef STRUCTS_H
+#define STRUCTS_H
+
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
+#include <iostream>
+
+#include "macros.h"
+
+using namespace std;
+
+// Stores values and shortcut functions for coloring terminal output and printing common messages (set -c or --no-color to disable colors)
+struct terminal {
+	// Escape codes
+	const char* code_blue;
+	const char* code_red;
+	const char* code_reset;
+	
+	// Colors
+	char* blue;
+	char* red;
+	char* reset;
+	
+	terminal () {
+		this->code_blue = "\x1b[34m";
+		this->code_red = "\x1b[31m";
+		this->code_reset = "\x1b[0m";
+		this->blue = (char*)malloc(strlen(this->code_blue));
+		this->red = (char*)malloc(strlen(this->code_red));
+		this->reset = (char*)malloc(strlen(this->code_reset));
+	}
+	
+	~terminal () {
+		free(this->blue);
+		free(this->red);
+		free(this->reset);
+	}
+	
+	// Used to indicate a process is done
+	void done () {
+		cout << this->blue << "Done" << this->reset << endl;
+	}
+	
+	// Used to indicate the program is out of memory
+	void no_memory () {
+		cout << this->red << "Not enough memory!" << this->reset;
+	}
+};
+
+// Stores all of the input parameters passed via command-line
+struct input_params {
+	// Input and output file paths (either absolute or relative)
+	char* input_file; // Default=input.csv
+	char* passed_file; // Default=passed.txt
+	char* cons_path; // Default when specified=concentrations.txt
+	char* features_file; // Default when specified=features.txt
+	char* pos_params_file; // Default when specified=pos_params.csv
+	
+	// Flags for whether or not certain features are active
+	bool print_cons; // Whether or not concentrations should be printed to a text file
+	bool print_features; // Whether or not oscillation features should be printed to a text file
+	bool pos_params; // Whether or not a positional parameters file should be loaded
+	
+	int num_pars; // The number of parameters to simulate, default=1
+	int print_gran; // The granularity in timesteps with which to print, default=1
+	
+	// Simulation size data
+	int width_post; // The width of the posterior PSM, default=1
+	int width_thresh; // The width of the threshold between the posterior and anterior, default=1
+	int width_ant; // The width of the anterior PSM, default=1
+	int height; // The height of the tissue, default=1
+	
+	// Simulation details
+	int minutes; // The number of minutes to run each simulation for, default=1200
+	int seed; // The seed, used for generating random numbers, default=current UNIX time
+	double step_size; // The time step in minutes used for Euler's method, default=0.01
+	double max_prop_thresh; // Maximum threshold for propensity functions, default=INFINITY
+	
+	input_params () {
+		this->input_file = NULL;
+		this->passed_file = NULL;
+		this->cons_path = NULL;
+		this->features_file = NULL;
+		this->pos_params_file = NULL;
+		this->print_cons = false;
+		this->print_features = false;
+		this->pos_params = false;
+		this->num_pars = 1;
+		this->print_gran = 1;
+		this->width_post = 1;
+		this->width_thresh = 1;
+		this->width_ant = 1;
+		this->height = 1;
+		this->minutes = 1200;
+		this->seed = time(0);
+		this->step_size = 0.01;
+		this->max_prop_thresh = INFINITY;
+	}
+	
+	~input_params () {
+		free(this->input_file);
+		free(this->passed_file);
+		free(this->cons_path);
+		free(this->features_file);
+		free(this->pos_params_file);
+	}
+};
+
+// Stores both static and dynamic simulation data
+struct sim_data {
+	// Time data
+	double step_size; // The step size in minutes
+	int time_total; // The total number of minutes to run for
+	int time_steps; // The number of time steps to simulate
+	
+	int max_prop_thresh; // The maximum threshold propensities can reach before the simulation is prematurely ended
+	
+	// Size data
+	int width_post; // The width in cells of the posterior PSM
+	int width_thresh; // The width in cells of the threshold between the posterior and anterior PSM
+	int width_ant; // The width in cells of the anterior PSM
+	int width_total; // The total width in cells of the PSM (posterior, threshold, and anterior)
+	int height; // The height in cells of the PSM
+	int cells_total; // The total number of cells of the PSM (total width * total height)
+	
+	// The active portion of the PSM is what gets recorded each iteration (these values can change each time step)
+	int active_start; // The start of the active portion of the PSM
+	int active_end; // The end of the active portion of the PSM
+	int active_thresh; // The threshold's position in the active portion of the PSM
+	
+	// Records of the active variables each time step
+	int* active_start_record;
+	int* active_end_record;
+	int* active_thresh_record;
+	
+	explicit sim_data (double step_size, int time_total, int max_prop_thresh, int width_post, int width_thresh, int width_ant, int height) {
+		this->step_size = step_size;
+		this->time_total = time_total;
+		this->time_steps = time_total / step_size;
+		this->max_prop_thresh = max_prop_thresh;
+		this->width_post = width_post;
+		this->width_thresh = width_thresh;
+		this->width_ant = width_ant;
+		this->width_total = width_post + width_thresh + width_ant;
+		this->height = height;
+		this->cells_total = width_total * height;
+		this->active_start = width_total - 1;
+		this->active_end = 0;
+		this->active_thresh = width_ant;
+		
+		this->active_start_record = new int[this->time_steps];
+		this->active_end_record = new int[this->time_steps];
+		this->active_thresh_record = new int[this->time_steps];
+		for (int i = 0; i < this->time_steps; i++) {
+			this->active_start_record[i] = 0;
+			this->active_end_record[i] = 0;
+			this->active_thresh_record[i] = 0;
+		}
+	}
+	
+	~sim_data () {
+		delete[] this->active_start_record;
+		delete[] this->active_end_record;
+		delete[] this->active_thresh_record;
+	}
+};
+
+// Stores the rates of mRNA synthesis, mRNA degradation, protein synthesis, protein degradation, etc. given via the rate parameters file
+struct rates {
+	double rate[size_rates]; // The initial rates as given in the parameters file before accounting for changes due to rate position adjustments
+	int cell_width; // Taken from the input parameters structure and becomes the size of the innermost array of cell_rate
+	double* cell_rate[size_rates]; // The rates after accounting for changes due to positional adjustments given via the rate position parameters file
+	
+	explicit rates (int cell_width) {
+		this->cell_width = cell_width;
+		for (int i = 0; i < size_rates; i++) {
+			this->cell_rate[i] = new double[cell_width];
+		}
+	}
+	
+	~rates () {
+		for (int i = 0; i < size_rates; i++) {
+			delete[] this->cell_rate[i];
+		}
+	}
+};
+
+// Stores rate position adjustments given via the rate position parameters file
+struct rate_positions {
+	bool adjusted[size_rates]; // Whether or not a given rate is positionally adjusted
+	int num_points[size_rates]; // The number of points the rate adjustment is determined by (2 or 4 are the only valid options, representing either a linear relationship across the PSM or a point for each significant point, i.e. start of the posterior, posterior threshold, anterior threshold, and end of the anterior)
+	double* points[size_rates]; // The array of points (of length 2 or 4, see above) containing the positional adjustments, ranging from 0.0 to 1.0, 0.0 representing complete inhibition of the rate and 1.0 representing no inhibition of the rate
+	
+	rate_positions () {
+		for (int i = 0; i < size_rates; i++) {
+			this->adjusted[i] = false; // Rates are by default not positionally adjusted
+			this->num_points[i] = 0;
+			this->points[i] = NULL;
+		}
+	}
+	
+	~rate_positions () {
+		for (int i = 0; i < size_rates; i++) {
+			if (this->points[i] != NULL) {
+				delete this->points[i];
+			}
+		}
+	}
+};
+
+// Stores rate positional adjustments that are applied to each rate structure as each parameter set is processed
+struct pos_param {
+	int rate;
+	int count;
+	
+	pos_param () {
+		this->rate = 0;
+		this->count = 0;
+	}
+};
+
+// Stores the current concentration levels of mRNA, proteins, and dimers
+struct con_levels {
+	int time_steps; // Taken from the input parameters structure and becomes the size of the middle array (time) of c
+	int cells_total; // Taken from the input parameters structure and becomes the size of the innermost array (cells) of c
+	double** c[size_con_levels]; // A three dimensional array that stores concentration levels * time * cells in that order
+	
+	explicit con_levels (int time_steps, int cells_total) {
+		this->time_steps = time_steps;
+		this->cells_total = cells_total;
+		
+		for (int i = 0; i < size_con_levels; i++) {
+			this->c[i] = new double*[time_steps];
+			for (int j = 0; j < time_steps; j++) {
+				this->c[i][j] = new double[cells_total];
+				for (int k = 0; k < cells_total; k++) {
+					this->c[i][j][k] = 0; // Initialize every concentration level at every time step for every cell to 0
+				}
+			}
+		}
+	}
+	
+	~con_levels () {
+		for (int i = 0; i < size_con_levels; i++) {
+			for (int j = 0; j < this->time_steps; j++) {
+				delete[] this->c[i][j];
+			}
+			delete[] this->c[i];
+		}
+	}
+};
+
+struct features {
+	double period;
+	double amplitude;
+	double peaktotrough1;
+	double peaktotrough2;
+	int consistent;
+	
+	features () {
+		this->period = 0;
+		this->amplitude = 0;
+		this->peaktotrough1 = 0;
+		this->peaktotrough2 = 0;
+		this->consistent = 0;
+	}
+};
+
+struct mutant_data {
+	char* name;
+	bool (*test)(features&, features&);
+	
+	~mutant_data () {
+		free(name);
+	}
+};
+
+struct input_file_data {
+	char* filename;
+	char* buffer;
+	int index;
+	
+	explicit input_file_data (char* filename) {
+		this->filename = filename;
+		this->buffer = NULL;
+		this->index = 0;
+	}
+	
+	~input_file_data () {
+		free(buffer);
+	}
+};
+
+// Spatiotemporal context
+struct st_context {
+	int time_prev;
+	int time_cur;
+	int cell_prev;
+	int cell_cur;
+	
+	explicit st_context (int time_prev, int time_cur, int cell_prev, int cell_cur) {
+		this->time_prev = time_prev;
+		this->time_cur = time_cur;
+		this->cell_prev = cell_prev;
+		this->cell_cur = cell_cur;
+	}
+};
+
+// Arguments for dimer interaction
+struct di_args {
+	rates& rs;
+	con_levels& cl;
+	st_context& stc;
+	double* dimer_effects;
+	
+	explicit di_args (rates& rs, con_levels& cl, st_context& stc, double dimer_effects[]) :
+		rs(rs), cl(cl), stc(stc), dimer_effects(dimer_effects)
+	{}
+};
+
+// Indices for dimer interaction
+struct di_indices {
+	int con_protein_self;
+	int con_protein_other;
+	int con_dimer;
+	int rate_association;
+	int rate_dissociation;
+	int delay_her;
+	
+	explicit di_indices (int con_protein_self, int con_protein_other, int con_dimer, int rate_association, int rate_dissociation, int delay_her) :
+		con_protein_self(con_protein_self), con_protein_other(con_protein_other), con_dimer(con_dimer), rate_association(rate_association), rate_dissociation(rate_dissociation), delay_her(delay_her)
+	{}
+};
+
+// Arguments grouped together to calculate protein concentrations
+struct cp_args {
+	sim_data& sd;
+	rates& rs;
+	con_levels& cl;
+	st_context& stc;
+	int* pdelays;
+	int* pdelays_cell;
+	double* dimer_effects;
+	
+	explicit cp_args (sim_data& sd, rates& rs, con_levels& cl, st_context& stc, int pdelays[], int pdelays_cell[], double dimer_effects[]) :
+		sd(sd), rs(rs), cl(cl), stc(stc), pdelays(pdelays), pdelays_cell(pdelays_cell), dimer_effects(dimer_effects)
+	{}
+};
+
+// Indices grouped together to calculate Her protein concentrations
+struct cph_indices {
+	int con_mrna;
+	int con_protein;
+	int con_dimer;
+	int rate_synthesis;
+	int rate_degradation;
+	int rate_association;
+	int rate_dissociation;
+	int delay_protein;
+	int delay_her;
+	
+	explicit cph_indices (int con_mrna, int con_protein, int con_dimer, int rate_synthesis, int rate_degradation, int rate_association, int rate_dissociation, int delay_protein, int delay_her) :
+		con_mrna(con_mrna), con_protein(con_protein), con_dimer(con_dimer), rate_synthesis(rate_synthesis), rate_degradation(rate_degradation), rate_association(rate_association), rate_dissociation(rate_dissociation), delay_protein(delay_protein), delay_her(delay_her)
+	{}
+};
+
+// Indices grouped together to calculate Delta and Mesp protein concentrations
+struct cpd_indices {
+	int con_mrna;
+	int con_protein;
+	int rate_synthesis;
+	int rate_degradation;
+	int delay;
+	
+	explicit cpd_indices (int con_mrna, int con_protein, int rate_synthesis, int rate_degradation, int delay) :
+		con_mrna(con_mrna), con_protein(con_protein), rate_synthesis(rate_synthesis), rate_degradation(rate_degradation), delay(delay)
+	{}
+};
+
+// Arguments grouped together to calculate dimer concentrations
+struct cd_args {
+	sim_data& sd;
+	rates& rs;
+	con_levels& cl;
+	st_context& stc;
+	
+	explicit cd_args (sim_data& sd, rates& rs, con_levels& cl, st_context& stc) :
+		sd(sd), rs(rs), cl(cl), stc(stc)
+	{}
+};
+
+// Indices grouped together to calculate dimer concentrations
+struct cd_indices {
+	int con_protein;
+	int rate_association;
+	int rate_dissociation;
+	int rate_degradation;
+	
+	explicit cd_indices (int con_protein, int rate_association, int rate_dissociation, int rate_degradation) :
+		con_protein(con_protein), rate_association(rate_association), rate_dissociation(rate_dissociation), rate_degradation(rate_degradation)
+	{}
+};
+
+#endif
+

@@ -1,0 +1,288 @@
+/*
+Deterministic simulator for zebrafish segmentation
+Copyright (C) 2012 Ahmet Ay, Jack Holland, Adriana Sperlea
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#ifndef MACROS_H
+#define MACROS_H
+
+#define chunk_size 10000 // the size of the chunk in bytes to read from the input buffer
+
+// Mutant indexes
+#define mutant_wildtype 	0
+#define mutant_delta 		1
+#define mutant_her13 		2
+#define mutant_her1 		3
+#define mutant_her7 		4
+#define mutant_her7her13 	5
+
+#define num_mutants 		6
+
+/// Named shortcuts for each concentration level of mRNA, protein, dimer
+
+// mRNA levels
+#define mh1		0
+#define mh7		1
+#define mh11 	2
+#define mh12	3
+#define mh13	4
+#define mh15	5
+#define mdelta	6
+#define mmesp	7
+
+// Protein levels
+#define ph1		8
+#define ph7		9
+#define ph11	10
+#define ph12	11
+#define ph13	12
+#define ph15	13
+#define pdelta	14
+#define pmesp	15
+
+// Dimer levels
+#define ph1h1	16
+#define ph1h7	17
+#define ph1h11	18
+#define ph1h12	19
+#define ph1h13	20
+#define ph1h15	21
+
+#define ph7h7	22
+#define ph7h11	23
+#define ph7h12	24
+#define ph7h13	25
+#define ph7h15	26
+
+#define ph11h11	27
+#define ph11h12	28
+#define ph11h13	29
+#define ph11h15	30
+
+#define ph12h12	31
+#define ph12h13	32
+#define ph12h15	33
+
+#define ph13h13	34
+#define ph13h15	35
+
+#define ph15h15	36
+
+// how big the array holding concentration levels must be
+#define size_con_levels 37
+
+/// Named shortcuts for each rate of mRNA, protein, dimer
+
+// mRNA synthesis rates
+#define MSH1		0
+#define MSH7		1
+#define MSH11		2
+#define MSH12		3
+#define MSH13		4
+#define MSH15		5
+#define MSDELTA		6
+#define MSMESP		7
+
+// mRNA degradation rates
+#define MDH1		8
+#define MDH7		9
+#define MDH11		10
+#define MDH12		11
+#define MDH13		12
+#define MDH15		13
+#define MDDELTA		14
+#define MDMESP		15
+
+// Protein synthesis rates
+#define PSH1		16
+#define PSH7		17
+#define PSH11		18
+#define PSH12		19
+#define PSH13		20
+#define PSH15		21
+#define PSDELTA		22
+#define PSMESP		23
+
+// Protein degradation rates
+#define PDH1		24
+#define PDH7		25
+#define PDH11		26
+#define PDH12		27
+#define PDH13		28
+#define PDH15		29
+#define PDDELTA		30
+#define PDMESP		31
+
+// Dimer association rates
+#define DAH1H1		32
+#define DAH1H7		33
+#define DAH1H11		34
+#define DAH1H12		35
+#define DAH1H13		36
+#define DAH1H15		37
+
+#define DAH7H7		38
+#define DAH7H11		39
+#define DAH7H12		40
+#define DAH7H13		41
+#define DAH7H15		42
+
+#define DAH11H11	43
+#define DAH11H12	44
+#define DAH11H13	45
+#define DAH11H15	46
+
+#define DAH12H12	47
+#define DAH12H13	48
+#define DAH12H15	49
+
+#define DAH13H13	50
+#define DAH13H15	51
+
+#define DAH15H15	52
+
+// Dimer dissociation rates
+#define DDIH1H1		53
+#define DDIH1H7		54
+#define DDIH1H11	55
+#define DDIH1H12	56
+#define DDIH1H13	57
+#define DDIH1H15	58
+
+#define DDIH7H7		59
+#define DDIH7H11	60
+#define DDIH7H12	61
+#define DDIH7H13	62
+#define DDIH7H15	63
+
+#define DDIH11H11	64
+#define DDIH11H12	65
+#define DDIH11H13	66
+#define DDIH11H15	67
+
+#define DDIH12H12	68
+#define DDIH12H13	69
+#define DDIH12H15	70
+
+#define DDIH13H13	71
+#define DDIH13H15	72
+
+#define DDIH15H15	73
+
+// Dimer degradation rates
+#define DDGH1H1		74
+#define DDGH1H7		75
+#define DDGH1H11	76
+#define DDGH1H12	77
+#define DDGH1H13	78
+#define DDGH1H15	79
+
+#define DDGH7H7		80
+#define DDGH7H11	81
+#define DDGH7H12	82
+#define DDGH7H13	83
+#define DDGH7H15	84
+
+#define DDGH11H11	85
+#define DDGH11H12	86
+#define DDGH11H13	87
+#define DDGH11H15	88
+
+#define DDGH12H12	89
+#define DDGH12H13	90
+#define DDGH12H15	91
+
+#define DDGH13H13	92
+#define DDGH13H15	93
+
+#define DDGH15H15	94
+
+// mRNA transcription delays
+#define DELAYMH1	95
+#define DELAYMH7	96
+#define DELAYMH11	97
+#define DELAYMH12	98
+#define DELAYMH13	99
+#define DELAYMH15	100
+#define DELAYMDELTA	101
+#define DELAYMMESP	102
+
+// mRNA translation delays
+#define DELAYPH1	103
+#define DELAYPH7	104
+#define DELAYPH11	105
+#define DELAYPH12	106
+#define DELAYPH13	107
+#define DELAYPH15	108
+#define DELAYPDELTA	109
+#define DELAYPMESP	110
+
+// Critical number of molecules of proteins per cell for inhibition of transcription
+#define CRITPH1H1 	111
+#define CRITPH7H13	112
+#define CRITPH11H11	113
+#define CRITPH12H12	114
+#define CRITPH12H13	115
+#define CRITPH13H15	116
+#define CRITPH15H15	117
+#define CRITPDELTA	118
+#define CRITPMESP	119
+
+#define size_rates 	120 // how big the array holding rates must be
+
+/// Named shortcuts for each index of mRNA, protein, dimer
+
+// Her gene indices
+#define _h1		0
+#define _h7		1
+#define _h11	2
+#define _h12	3
+#define _h13	4
+#define _h15	5
+
+#define size_her_indices 6 // how big the array holding the her gene indices must be
+
+// mRNA indices
+#define _mh1 	0
+#define _mh7 	1
+#define _mh11	2
+#define _mh12	3
+#define _mh13	4
+#define _mh15	5
+#define _mdelta	6
+#define _mmesp	7
+
+// Protein indices
+#define _ph1	0
+#define _ph7	1
+#define _ph11	2
+#define _ph12	3
+#define _ph13	4
+#define _ph15	5
+#define _pdelta	6
+#define _pmesp	7
+
+#define size_indices 8 // how big the array holding mRNA or protein indices must be
+
+// Macros for commonly used functions small enough to inject directly into the code
+#define abs(x) (x < 0 ? -x : x)
+#define square(x) (x * x)
+#define mini(x, y) (x < y ? x : y)
+#define maxi(x, y) (x < y ? y : x)
+#define zero_if_nan(x) (is_nan(x) ? 0 : x)
+
+#endif
+

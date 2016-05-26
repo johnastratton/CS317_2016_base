@@ -1,0 +1,43 @@
+/*
+Deterministic simulator for zebrafish segmentation
+Copyright (C) 2012 Ahmet Ay, Jack Holland, Adriana Sperlea
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/*
+The program simulates the behavior of the zebrafish segmentation clock for two cells,
+through a matematical model using delay differential equations.
+To solve the equations, the program uses Euler's method, with an adjustable stepsize.
+The program tries to find parameter sets which replicate the behavior of the system in wild type
+and several mutants.
+*/
+
+#ifndef FEATS_H
+#define FEATS_H
+
+#include "structs.h"
+
+void osc_features(sim_data&, con_levels&, features&, bool);
+double calc_per_amp_pt2(sim_data&, con_levels&, int);
+double avg_pearson(sim_data&, con_levels&, int);
+double pearson_correlation(sim_data&, con_levels&, int, int);
+bool test_wildtype(features&, features&);
+bool test_h1_mutant(features&, features&);
+bool test_h7_mutant(features&, features&);
+bool test_h13_mutant(features&, features&);
+bool test_h7h13_mutant(features&, features&);
+bool test_delta_mutant(features&, features&);
+
+#endif

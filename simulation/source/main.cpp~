@@ -1,0 +1,199 @@
+/*
+Deterministic simulator for zebrafish segmentation
+Copyright (C) 2012 Ahmet Ay, Jack Holland, Adriana Sperlea
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/*
+The program simulates the behavior of the zebrafish segmentation clock for two cells,
+through a matematical model using delay differential equations.
+To solve the equations, the program uses Euler's method, with an adjustable stepsize.
+The program tries to find parameter sets which replicate the behavior of the system in wild type
+and several mutants.
+*/
+
+#include <cstring>
+#include <cstdio>
+#include <cstdlib>
+#include <fstream>
+#include <iostream>
+#include <string>
+
+#include "main.h"
+#include "macros.h"
+#include "structs.h"
+#include "init.h"
+#include "sim.h"
+#include "file-io.h"
+
+using namespace std;
+
+extern terminal* term;
+
+int main(int argc, char** argv) {
+	/// Check for user inputed arguments and initialize default values
+	
+	// Accept and initialize program parameters
+	input_params ip;
+	init_terminal();
+	accept_params(argc, argv, ip);
+	set_default_files(ip);
+	check_sim_size(ip);
+	init_seed(ip);
+
+	// Read the entire input file into a buffer to speed up I/O
+	input_file_data params_data(ip.input_file);
+	input_file_data pos_params_data(ip.pos_params_file);
+	read_sim_params(ip, params_data, pos_params_data);
+	check_num_params_valid(ip, params_data.buffer);
+	
+	// Create output files
+	ofstream* file_passed = create_passed_file(ip);
+	char** filenames_cons = create_cons_filenames(ip);
+	ofstream* file_features = create_features_file(ip);
+	
+	// Initialize simulation rates, rate positions, and mutant data
+	sim_data sd(ip.step_size, ip.minutes, ip.max_prop_thresh, ip.width_post, ip.width_thresh, ip.width_ant, ip.height);
+	rates* rs = new rates(sd.width_total);
+	rate_positions rps;
+	store_rate_positions(&rps, ip.pos_params, &pos_params_data);
+	mutant_data* mds = create_mutant_data();
+	
+	// Perform the actual simulations
+	simulate_all_params(ip, *rs, rps, sd, params_data, mds, file_passed, filenames_cons, file_features);
+	
+	// Free up memory, close files, etc.
+	delete_mutant_data(mds);
+	delete rs;
+	delete_passed_file(file_passed);
+	delete_cons_filenames(filenames_cons);
+	delete_features_file(file_features);
+	free_terminal();
+	return 0;
+}
+
+double interpolate (int x, int x0, int x1, double y0, double y1) {
+	return y0 + (y1 - y0) * ((x - x0) / (x1 - x0));
+}
+
+void generate_set (double items[]) {
+	/*
+	 Generate a random set of parameters to be used with the simulation.
+	 The ranges for every parameter can be adjusted in their specific 2 element arrays.
+	*/
+	
+	// Ranges of mRNA synthesis rates
+	double msh[2] = {15, 65};
+	for (int i = 0; i <= 7; i++) {
+		items[i] = make_random(msh);
+	}
+
+	// Ranges of mRNA degradation rates
+	double mdh[2] = {0.1, 0.4};
+	for (int i = 8; i <= 15; i++) {
+		items[i] = make_random(mdh);
+	}
+	
+	// Ranges of protein synthesis rates
+	double psh[2] = {5, 60};
+	for (int i = 16; i <= 23; i++) {
+		items[i] = make_random(psh);
+	}
+	
+	// Ranges of protein degradation rates
+	double pdh[2] = {0.1, 0.4};
+	for (int i = 24; i <= 31; i++) {
+		items[i] = make_random(pdh);
+	}
+	
+	// Ranges of dimer degradation rates
+	double ddg[2] = {0.1, 0.4};
+	for (int i = 32; i <= 52; i++) {
+		items[i] = make_random(ddg);
+	}
+	
+	// Ranges of mRNA transcription delays
+	double delaym[2] = {5, 12.0};
+	for (int i = 53; i <= 60; i++) {
+		items[i] = make_random(delaym);
+	}
+	items[57] = -1;
+	
+	// Ranges mRNA translation delays
+	double delayp[2] = {0.3, 2.0};
+	for (int i = 61; i <= 68; i++) {
+		items[i] = make_random(delayp);
+	}
+	
+	// Ranges of dimer association rates
+	double da[2] = {0.0003, 0.03};
+	for (int i = 69; i <= 89; i++) {
+		items[i] = make_random(da);
+	}
+	
+	// ranges of dimer dissociation rates
+	double dd[2] = {0.0003, 0.03};
+	for (int i = 90; i <= 110; i++) {
+		items[i] = make_random(dd);
+	}
+	
+	// critical number of Her1-Her1, Her7-Her13 dimer proteins for inhibition of transcription
+	double critp[2] = {30, 1500};
+	for (int i = 111; i <= 119; i++) {
+		items[i] = make_random(critp);
+	}
+}
+
+char* copy_str (const char* str) {
+	char* newstr = (char*)malloc(sizeof(char) * strlen(str) + 1);
+	return strcpy(newstr, str);
+}
+
+void usage (const char* message) {
+	if (strcmp(message, "") != 0) { // if there is an error message to print then print it
+		cout << term->red << message << term->reset << endl << endl;
+	}
+	cout << "Usage: [-option [value]]. . . [--option [value]]. . ." << endl;
+	cout << "-i, --input-file            : the input path and file to accept parameters from, default=input.txt" << endl;
+	cout << "-o, --output-file           : the path and file to print the output (i.e. parameters which passed conditions) to, default=passed.csv" << endl;
+	cout << "-t, --print-concentrations  : the path and file to print concentrations to, default=none" << endl;
+	cout << "-g, --print-granularity     : the granularity in timesteps with which to print, default=1" << endl;
+	cout << "-f, --print-osc-features    : the path and file to print oscillation features to, default=none" << endl;
+	cout << "-x, --posterior-width       : the tissue width (in cells), 2 for two-cell system, min=3 for chain, min=4 and even for tissue, default=3" << endl;
+	cout << "-w, --threshold-width       : width of the FGF threshold dividing the posterior from the anterior, min=1, default=4" << endl;
+	cout << "-n, --anterior-width        : the number of cells in the anterior to keep updating, min=0, default=20" << endl;
+	cout << "-y, --height                : the tissue height (in cells), 1 for two-cell system and chain, min=4 and even for tissue, default=1" << endl;
+	cout << "-S, --step-size             : the size of the timestep to be used for solving the DDEs using Euler's method" << endl;
+	cout << "-m, --minutes               : the maximum number of minutes to simulate before ending, min=1, default=1200" << endl;
+	cout << "-p, --parameters            : the number of parameters for which to simulate the model, min=1, default=1" << endl;
+	cout << "-P, --positional-parameters : the path and file containing the positional changes to parameter values, default=none" << endl;
+	cout << "-s, --seed                  : the seed to generate random numbers, min=1, default=time" << endl;
+	cout << "-a, --max-prop-threshold    : the threshold for the propensity functions which could be used in the stochastic simulation, min=1, default=none" << endl;
+	cout << "-c, --no-color              : disable coloring the terminal output, default=unused" << endl;
+	cout << "-q, --quiet                 : hide the terminal output, default=unused" << endl;
+	cout << "-l, --licensing             : view licensing information (no simulations will be run)" << endl;
+	cout << "-h, --help                  : view usage information (i.e. this)" << endl;
+	cout << endl << term->blue << "Example: ./deterministic -i parameters.csv --parameters 10 -m 2000 --no-color" << term->reset << endl << endl;
+	exit(0);
+}
+
+void licensing () {
+	cout << "Stochastic simulator for zebrafish segmentation" << endl;
+	cout << "Copyright (C) 2012 Ahmet Ay (aay@colgate.edu), Jack Holland (jholland@colgate.edu), Adriana Sperlea (asperlea@colgate.edu)" << endl;
+	cout << "This program comes with ABSOLUTELY NO WARRANTY" << endl;
+	cout << "This is free software, and you are welcome to redistribute it under certain conditions;" << endl;
+	cout << "You can use this code and modify it as you wish under the condition that you refer to the article: ???" << endl;
+	exit(0);
+}

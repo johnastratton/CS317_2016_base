@@ -1,0 +1,12 @@
+#PBS -N sres_15
+#PBS -l nodes=1:ppn=4
+#PBS -q biomath
+#PBS -M jye@colgate.edu
+#PBS -m bea
+#PBS -j oe
+#PBS -r n
+#
+cd $PBS_O_WORKDIR
+
+mpiexec -np 4 ./sres -r guess.ranges -g 100 -a -x 10 -w 10 -y 6 -M 1
+

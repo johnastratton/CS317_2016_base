@@ -1,0 +1,132 @@
+/*
+Deterministic simulator for zebrafish segmentation
+Copyright (C) 2012 Ahmet Ay, Jack Holland, Adriana Sperlea
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#include <iostream>
+
+#include "debug.h"
+#include "macros.h"
+
+using namespace std;
+
+bool is_nan (volatile double x) {
+	return x != x;
+}
+
+void print_rs (rates& rs) {
+	cerr << "rates:\n";
+	for (int i = 0; i < size_rates; i++) {
+		cerr << "  " << i << ": " << rs.rate[i] << "\n";
+	}
+}
+
+void print_cl (con_levels& cl) {
+	for (int i = 0; i < size_con_levels; i++) {
+		print_con(cl, i);
+	}
+}
+
+void print_cl_at (con_levels& cl, int timestep) {
+	cerr << "timestep: " << timestep << "\n";
+	for (int i = 0; i < size_con_levels; i++) {
+		cerr << "  concentration " << i << ": " << cl.c[i][timestep][0];
+		for (int k = 1; k < cl.cells_total; k++) {
+			cerr << "," << cl.c[i][timestep][k];
+		}
+		cerr << "\n";
+	}
+}
+
+void print_cl_when_nonzero (con_levels& cl) {
+	for (int i = 0; i < size_con_levels; i++) {
+		for (int j = 0; j < cl.cells_total; j++) {
+			for (int k = 0; k < cl.cells_total; k++) {
+				if (cl.c[i][j][k] != 0) {
+					print_cl_at(cl, j);
+					return;
+				}
+			}
+		}
+	}
+}
+
+void print_cl_when_same (con_levels& cl) {
+	for (int j = 0; j < cl.time_steps; j++) {
+		double value = cl.c[0][j][0];
+		bool same = true;
+		for (int i = 0; i < size_con_levels; i++) {
+			for (int k = 0; k < cl.cells_total; k++) {
+				if (cl.c[i][j][k] != value) {
+					same = false;
+					break;
+				}
+			}
+			if (!same) {
+				break;
+			}
+		}
+		if (same) {
+			cerr << "timestep: " << j << ", value: " << value << "\n";
+		}
+	}
+}
+
+void print_con (con_levels& cl, int concentration) {
+	cerr << "concentration: " << concentration << "\n";
+	for (int j = 0; j < cl.time_steps; j++) {
+		cerr << "  timestep: " << j << "\n    " << cl.c[concentration][j][0];
+		for (int k = 1; k < cl.cells_total; k++) {
+			cerr << "," << cl.c[concentration][j][k];
+		}
+		cerr << "\n";
+	}
+}
+
+void print_con_at (con_levels& cl, int concentration, int timestep) {
+	cerr << "concentration: " << concentration << ", timestep: " << timestep << "\n  " << cl.c[concentration][timestep][0];
+	for (int k = 1; k < cl.cells_total; k++) {
+		cerr << "," << cl.c[concentration][timestep][k];
+	}
+	cerr << "\n";
+}
+
+void print_cl_nonzero_at (con_levels& cl, int timestep) {
+	cerr << "timestep: " << timestep << ", nonzero: ";
+	bool first = true;
+	for (int i = 0; i < size_con_levels; i++) {
+		for (int k = 0; k < cl.cells_total; k++) {
+			if (cl.c[i][timestep][k] != 0) {
+				if (first) {
+					first = false;
+				} else {
+					cerr << ",";
+				}
+				cerr << i;
+				break;
+			}
+		}
+	}
+	cerr << "\n";
+}
+
+void print_cl_at_for (con_levels& cl, int timestep, int cell) {
+	cerr << "timestep: " << timestep << ", cell: " << cell << "\n";
+	for (int i = 0; i < size_con_levels; i++) {
+		cerr << "  concentration " << i << ": " << cl.c[i][timestep][cell] << "\n";
+	}
+}
+
