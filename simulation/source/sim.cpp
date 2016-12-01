@@ -48,24 +48,24 @@ void simulate_all_params (input_params& ip, rates& rs, sim_data& sd, double** se
 	// Initialize score data
 	int sets_passed = 0;
 	double score[ip.num_sets];
-	
+
 	// Initialize the concentration levels structs
 	int max_cl_size = MAX(sd.steps_til_growth, sd.max_delay_size + sd.steps_total - sd.steps_til_growth) / sd.big_gran + 1;
 	con_levels cl(NUM_CON_STORE, max_cl_size, sd.cells_total, sd.active_start); // Concentration levels for analysis and storage
 	con_levels baby_cl(NUM_CON_LEVELS, sd.max_delay_size, sd.cells_total, sd.active_start); // Concentration levels for simulating (time in this cl is treated cyclically)
-	
+
 	// Simulate every parameter set
 	for (int i = 0; i < ip.num_sets; i++) {
 		memcpy(rs.rates_base, sets[i], sizeof(double) * NUM_RATES); // Copy the set's rates to the current simulation's rates
 		score[i] = simulate_param_set(i, ip, sd, rs, cl, baby_cl, mds, file_passed, file_scores, dirnames_cons, file_features, file_conditions);
 		sets_passed += determine_set_passed(sd, i, score[i]); // Calculate the maximum score and whether the set passed
 	}
-	
+
 	// Pipe the scores if piping specified by the user
 	if (ip.piping) {
 		write_pipe(score, ip, sd);
 	}
-	
+
 	cout << endl << term->blue << "Done: " << term->reset << sets_passed << "/" << ip.num_sets << " parameter sets passed all conditions" << endl;
 }
 
@@ -118,20 +118,20 @@ double simulate_param_set (int set_num, input_params& ip, sim_data& sd, rates& r
 	}
 	cl.reset(); // Reset the concentration levels for each set
 	(*mds).feat.reset();
-	
+
 	// Simulate every mutant in the posterior before moving on to the anterior
 	int end_section = SEC_ANT * !(sd.no_growth);
 	for (int i = SEC_POST; i <= end_section; i++) {
 		sd.section = i;
 		num_passed += simulate_section(set_num, ip, sd, rs, cl, baby_cl, mds, dirnames_cons, scores);
 	}
-	
+
 	// Calculate the total score
 	double total_score = 0;
 	for (int i = 0; i < NUM_SECTIONS * ip.num_active_mutants; i++) {
 		total_score += scores[i];
 	}
-	
+
 	// Print the mutant's results (if not short circuiting)
 	if (total_score == sd.max_scores[SEC_POST] + sd.max_scores[SEC_WAVE] + sd.max_scores[SEC_ANT]) {
 		print_passed(ip, file_passed, rs);
@@ -139,7 +139,7 @@ double simulate_param_set (int set_num, input_params& ip, sim_data& sd, rates& r
 	print_osc_features(ip, file_features, mds, set_num, num_passed);
 	print_conditions(ip, file_conditions, mds, set_num);
 	print_scores(ip, file_scores, set_num, scores, total_score);
-	
+
 	return total_score;
 }
 
@@ -164,7 +164,7 @@ int simulate_section (int set_num, input_params& ip, sim_data& sd, rates& rs, co
 	double temp_rates[2]; // Array of knockout rates so knockouts can be quickly applied and reverted
 	determine_start_end(sd);
 	reset_mutant_scores(ip, mds);
-	
+
 	// Simulate each mutant
 	for (int i = 0; i < ip.num_active_mutants; i++) {
 		mutant_sim_message(mds[i], i);
@@ -174,14 +174,14 @@ int simulate_section (int set_num, input_params& ip, sim_data& sd, rates& rs, co
 		scores[sd.section * ip.num_active_mutants + i] = current_score;
 		baby_cl.reset();
 		revert_knockout(rs, mds[i], temp_rates); // this should still happen at the end
-		
+
 		if (current_score == mds[i].max_cond_scores[sd.section]) { // If the mutant passed, increment the passed counter
 			++num_passed;
 		} else if (ip.short_circuit) { // Exit both loops if the mutant failed and short circuiting is active
 			return num_passed;
 		}
 	}
-	
+
 	return num_passed;
 }
 
@@ -217,7 +217,7 @@ void reset_mutant_scores (input_params& ip, mutant_data mds[]) {
 				mds[i].conds_passed[j][k] = 0;
 			}
 			mds[i].secs_passed[j] = false;
-			
+
 		}
 	}
 	mds[MUTANT_WILDTYPE].conds_passed[SEC_WAVE][0]=1;
@@ -274,9 +274,9 @@ inline void store_original_rates (rates& rs, mutant_data& md, double orig_rates[
 */
 inline void knockout (rates& rs, mutant_data& md, bool induction) {
 	for (int i = 0; i < md.num_knockouts; i++) {
-		if (!(md.index==MUTANT_DAPT && induction == 0)){               
+		if (!(md.index==MUTANT_DAPT && induction == 0)){
 			rs.rates_base[md.knockouts[i]] = 0;
-		} 
+		}
 	}
 }
 
@@ -315,7 +315,7 @@ double simulate_mutant (int set_num, input_params& ip, sim_data& sd, rates& rs, 
 	reset_seed(ip, sd); // Reset the seed for each mutant
 	baby_cl.reset(); // Reset the concentrations levels used for simulating
 	perturb_rates_all(rs); // Perturb the rates of all starting cells
-	
+
 	// Initialize active record data and neighbor calculations
 	sd.initialize_active_data();
 	if (sd.height > 1) {
@@ -323,15 +323,15 @@ double simulate_mutant (int set_num, input_params& ip, sim_data& sd, rates& rs, 
 	}
 	cl.active_start_record[0] = sd.active_start;
 	baby_cl.active_start_record[0] = sd.active_start;
-	
+
 	// Copy the posterior results if this is an anterior simulation
 	if (sd.section == SEC_ANT) {
 		copy_mutant_to_cl(sd, baby_cl, md);
 	}
-	
+
 	// Simulate the mutant
 	bool passed = model(sd, rs, cl, baby_cl, md, temp_rates);
-	
+
 	// Analyze the simulation's oscillation features
 	term->verbose() << term->blue << "    Analyzing " << term->reset << "oscillation features . . . ";
 	double score = 0;
@@ -349,7 +349,7 @@ double simulate_mutant (int set_num, input_params& ip, sim_data& sd, rates& rs, 
 			term->verbose() << term->blue << "Done" << endl;
 		}
 	}
-	
+
 	// Copy and print the appropriate data
 	print_concentrations(ip, sd, cl, md, dirname_cons, set_num);
 	if (sd.section == SEC_ANT) { // Print concentrations of columns of cells from posterior to anterior to a file if the user specified it
@@ -358,7 +358,7 @@ double simulate_mutant (int set_num, input_params& ip, sim_data& sd, rates& rs, 
 	if (!sd.no_growth && sd.section == SEC_POST && !ip.short_circuit) { // Copy the concentration levels to the mutant data (if not short circuiting)
 		copy_cl_to_mutant(sd, baby_cl, md);
 	}
-	
+
 	// Print how the mutant performed and finish book-keeping
 	term->verbose() << "  " << term->blue << "Done: " << term->reset << md.print_name << " scored ";
 	if (passed) {
@@ -409,14 +409,14 @@ double simulate_mutant (int set_num, input_params& ip, sim_data& sd, rates& rs, 
 bool model (sim_data& sd, rates& rs, con_levels& cl, con_levels& baby_cl, mutant_data& md, double temp_rates[2]) {
 	int steps_elapsed = sd.steps_split; // Used to determine when to split a column of cells
 	update_rates(rs, sd.active_start); // Update the active rates based on the base rates, perturbations, and gradients
-	
+
 	// Iterate through each time step
 	int j; // Absolute time used by cl
 	int baby_j; // Cyclical time used by baby_cl
 	bool past_induction = false; // Whether we've passed the point of induction of knockouts or overexpression
 	bool past_recovery = false; // Whether we've recovered from the knockouts or overexpression
 	for (j = sd.time_start, baby_j = 0; j < sd.time_end; j++, baby_j = WRAP(baby_j + 1, sd.max_delay_size)) {
-		
+
 		if (!past_induction && !past_recovery && (j  > anterior_time(sd,md.induction))) {
 			knockout(rs, md, 1); //knock down rates after the induction point
 			perturb_rates_all(rs); //This is used for knockout the rate in the existing cells, may need modification
@@ -425,11 +425,11 @@ bool model (sim_data& sd, rates& rs, con_levels& cl, con_levels& baby_cl, mutant
 		if (past_induction && (j + sd.steps_til_growth > md.recovery)) {
 			revert_knockout(rs, md, temp_rates);
 			past_recovery = true;
-		}            
+		}
 
 		int time_prev = WRAP(baby_j - 1, sd.max_delay_size); // Time is cyclical, so time_prev may not be baby_j - 1
 		copy_records(sd, baby_cl, baby_j, time_prev); // Copy each cell's birth and parent so the records are accessible at every time step
-		
+
 		// Iterate through each extant cell
 		for (int k = 0; k < sd.cells_total; k++) {
 			if (sd.width_current == sd.width_total || k % sd.width_total <= sd.active_start) { // Compute only existing (i.e. already grown) cells
@@ -437,7 +437,7 @@ bool model (sim_data& sd, rates& rs, con_levels& cl, con_levels& baby_cl, mutant
 				int old_cells_mrna[NUM_INDICES];
 				int old_cells_protein[NUM_INDICES];
 				calculate_delay_indices(sd, baby_cl, baby_j, j, k, rs.rates_active, old_cells_mrna, old_cells_protein);
-				
+
 				// Perform biological calculations
 				st_context stc(time_prev, baby_j, k);
 				protein_synthesis(sd, rs.rates_active, baby_cl, stc, old_cells_protein);
@@ -445,34 +445,34 @@ bool model (sim_data& sd, rates& rs, con_levels& cl, con_levels& baby_cl, mutant
 				mRNA_synthesis(sd, rs.rates_active, baby_cl, stc, old_cells_mrna, md, past_induction, past_recovery);
 			}
 		}
-		
+
 		// Check to make sure the numbers are still valid
 		if (any_less_than_0(baby_cl, baby_j) || concentrations_too_high(baby_cl, baby_j, sd.max_con_thresh)) {
 			return false;
 		}
-		
+
 		// Split cells periodically in anterior simulations
 		if (sd.section == SEC_ANT && (steps_elapsed % sd.steps_split) == 0) {
 			split(sd, rs, baby_cl, baby_j, j);
 			update_rates(rs, sd.active_start);
 			steps_elapsed = 0;
 		}
-		
+
 		// Update the active record data and split counter
 		steps_elapsed++;
 		baby_cl.active_start_record[baby_j] = sd.active_start;
 		baby_cl.active_end_record[baby_j] = sd.active_end;
-		
+
 		// Copy from the simulating cl to the analysis cl
 		if (j % sd.big_gran == 0) {
 			baby_to_cl(baby_cl, cl, baby_j, j / sd.big_gran);
 		}
 	}
-	
+
 	// Copy the last time step from the simulating cl to the analysis cl and mark where the simulating cl left off time-wise
 	baby_to_cl(baby_cl, cl, WRAP(baby_j - 1, sd.max_delay_size), (j - 1) / sd.big_gran);
 	sd.time_baby = baby_j;
-	
+
 	return true;
 }
 
@@ -579,13 +579,11 @@ void split (sim_data& sd, rates& rs, con_levels& cl, int baby_time, int time) {
 	// Calculate the next active start and current width
 	int next_active_start = (sd.active_start + 1) % sd.width_total;
 	sd.width_current = MIN(sd.width_current + 1, sd.width_total);
-	
+
 	// Determine which child corresponds to which parent
 	int parents[sd.height];
 	for (int i = 0; i < sd.height; i++) {
 		parents[i] = -1;
-	}
-	for (int i = 0; i < sd.height; i++) {
 		int index;
 		bool dup;
 		do { // Ensure each parent produces exactly one child
@@ -600,20 +598,20 @@ void split (sim_data& sd, rates& rs, con_levels& cl, int baby_time, int time) {
 		} while (dup);
 		parents[i] = index;
 	}
-	
+
 	// Transfer each new cell's parent concentration levels to the new cell
 	for (int i = 0; i < NUM_CON_LEVELS; i++) {
 		for (int k = 0; k < sd.height; k++) {
 			cl.cons[i][baby_time][next_active_start + k * sd.width_total] = cl.cons[i][baby_time][sd.active_start + parents[k] * sd.width_total];
 		}
 	}
-	
+
 	// Set each new cell's birth to the current time and store its assigned parent
 	for (int k = 0; k < sd.height; k++) {
 		cl.cons[BIRTH][baby_time][next_active_start + k * sd.width_total] = time;
 		cl.cons[PARENT][baby_time][next_active_start + k * sd.width_total] = sd.active_start + parents[k] * sd.width_total;
 	}
-	
+
 	// Perturb the new cells and update the active record data
 	perturb_rates_column(sd, rs, next_active_start);
 	sd.active_start = next_active_start;
@@ -659,7 +657,7 @@ void update_rates (rates& rs, int active_start) {
 					} else {
 						gradient_index = active_start + rs.width - col;
 					}
-					
+
 					// Set the cell's active rate to its perturbed rate modified by its position's gradient factor
 					rs.rates_active[i][k] = rs.rates_cell[i][k] * rs.factors_gradient[i][gradient_index];
 				}
@@ -696,9 +694,9 @@ void protein_synthesis (sim_data& sd, double** rs, con_levels& cl, st_context& s
 	double dimer_effects[NUM_HER_INDICES] = {0}; // Heterodimer calculations
 	di_args dia(rs, cl, stc, dimer_effects); // WRAPper for repeatedly used structs
 	cp_args cpa(sd, rs, cl, stc, old_cells_protein, dimer_effects); // WRAPper for repeatedly used indices
-	
+
 	/// Dimerizing genes
-	
+
 	// Her1
 	dim_int(dia, di_indices(CPH1, CPH7,  CPH1H7,  RDAH1H7,  RDDIH1H7,  IH1));
 	/*if (sd.section == SEC_ANT) {
@@ -707,7 +705,7 @@ void protein_synthesis (sim_data& sd, double** rs, con_levels& cl, st_context& s
 	}*/
 	dim_int(dia, di_indices(CPH1, CPH13, CPH1H13, RDAH1H13, RDDIH1H13, IH1));
 	con_protein_her(cpa, cph_indices(CMH1, CPH1, CPH1H1, RPSH1, RPDH1, RDAH1H1, RDDIH1H1, RDELAYPH1, IH1, IPH1));
-	
+
 	// Her7
 	dim_int(dia, di_indices(CPH7, CPH1,  CPH1H7,  RDAH1H7,  RDDIH1H7,  IH7));
 	/*if (sd.section == SEC_ANT) {
@@ -716,7 +714,7 @@ void protein_synthesis (sim_data& sd, double** rs, con_levels& cl, st_context& s
 	}*/
 	dim_int(dia, di_indices(CPH7, CPH13, CPH7H13, RDAH7H13, RDDIH7H13, IH7));
 	con_protein_her(cpa, cph_indices(CMH7, CPH7, CPH7H7, RPSH7, RPDH7, RDAH7H7, RDDIH7H7, RDELAYPH7, IH7, IPH7));
-	
+
 	if (sd.section == SEC_ANT) {
 		// MespA
 		//dim_int(dia, di_indices(CPMESPA, CPH1,  CPH1MESPA,  RDAH1MESPA,  RDDIH1MESPA,  IMESPA));
@@ -741,9 +739,9 @@ void protein_synthesis (sim_data& sd, double** rs, con_levels& cl, st_context& s
 		dim_int(dia, di_indices(CPH13, CPMESPB, CPMESPBH13, RDAMESPBH13, RDDIMESPBH13, IH13));
 	}*/
 	con_protein_her(cpa, cph_indices(CMH13, CPH13, CPH13H13, RPSH13, RPDH13, RDAH13H13, RDDIH13H13, RDELAYPH13, IH13, IPH13));
-	
+
 	/// Nondimerizing genes
-	
+
 	// Delta
 	con_protein_delta(cpa, cpd_indices(CMDELTA, CPDELTA, RPSDELTA, RPDDELTA, RDELAYPDELTA, IPDELTA));
 }
@@ -761,7 +759,7 @@ inline void dim_int (di_args& a, di_indices dii) {
 	double*** c = a.cl.cons;
 	int tp = a.stc.time_prev;
 	int cell = a.stc.cell;
-	
+
 	// The part of the given Her protein concentration's differential equation that accounts for heterodimers
 	a.dimer_effects[dii.dimer_effect] =
 		a.dimer_effects[dii.dimer_effect]
@@ -785,7 +783,7 @@ inline void con_protein_her (cp_args& a, cph_indices i) {
 	int tc = a.stc.time_cur;
 	int tp = a.stc.time_prev;
 	int td = WRAP(tc - delay_steps, a.sd.max_delay_size);
-	
+
 	// The part of the given Her protein concentration's differential equation that accounts for everything but heterodimers, whose influence is calculated in dim_int
 	c[i.con_protein][tc][cell] =
 		c[i.con_protein][tp][cell]
@@ -812,7 +810,7 @@ inline void con_protein_delta (cp_args& a, cpd_indices i) {
 	int tc = a.stc.time_cur;
 	int tp = a.stc.time_prev;
 	int td = WRAP(tc - delay_steps, a.sd.max_delay_size);
-	
+
 	// The Delta protein concentration's differential equation (no dimerization occurs)
 	c[i.con_protein][tc][cell] =
 		c[i.con_protein][tp][cell]
@@ -834,9 +832,9 @@ inline void con_protein_delta (cp_args& a, cpd_indices i) {
 */
 void dimer_proteins (sim_data& sd, double** rs, con_levels& cl, st_context& stc) {
 	cd_args cda(sd, rs, cl, stc); // WRAPper for repeatedly used structs
-	
+
 	for (int i = CPH1H1,       j = 0;   i <= CPH1H13;   i++, j++) {
-		/*while (sd.section == SEC_POST && CPH1MESPA <= i && i <= CPH1MESPB) { 
+		/*while (sd.section == SEC_POST && CPH1MESPA <= i && i <= CPH1MESPB) {
 			i++;
 			j++;
 		}*/
@@ -915,7 +913,7 @@ void mRNA_synthesis (sim_data& sd, double** rs, con_levels& cl, st_context& stc,
 	for (int j = 0; j < NUM_INDICES; j++) {
 		delays[j] = rs[RDELAYMH1 + j][stc.cell] / sd.step_size;
 	}
-	
+
 	// Calculate the influence of the given cell's neighbors (via Delta-Notch signaling)
 	double avg_delays[NUM_DD_INDICES]; // Averaged delays for each mRNA concentration caused by the given cell's neighbors' Delta protein concentrations
 	if (sd.height == 1) { // For 2-cell and 1D simulations
@@ -928,7 +926,7 @@ void mRNA_synthesis (sim_data& sd, double** rs, con_levels& cl, st_context& stc,
 				int old_active_end = cl.active_end_record[old_time];
 				calc_neighbors_1d(sd, neighbors[IMH1 + j], old_cells_mrna[IMH1 + j], old_active_start, old_active_end);
 			}
-			
+
 			// For each mRNA concentration, average the give cell's neighbors' Delta protein concentrations
 			for (int j = 0; j < NUM_DD_INDICES; j++) {
 				int* cells = neighbors[IMH1 + j];
@@ -956,12 +954,11 @@ void mRNA_synthesis (sim_data& sd, double** rs, con_levels& cl, st_context& stc,
 			// 2D neighbors are precalculated and simply copied from the structure as needed
 			int cell = old_cells_mrna[IMH1 + j];
 			memcpy(neighbors[IMH1 + j], sd.neighbors[cell], sizeof(int) * NEIGHBORS_2D);
-		}
-				
-		// For each mRNA concentration, average the given cell's neighbors' Delta protein concentrations
-		for (int j = 0; j < NUM_DD_INDICES; j++) {
+
+			// merge happened here
+
+			// For each mRNA concentration, average the given cell's neighbors' Delta protein concentrations
 			int* cells = neighbors[IMH1 + j];
-			int cell = old_cells_mrna[IMH1 + j];
 			int time = WRAP(stc.time_cur - delays[j], sd.max_delay_size);
 			double* cur_cons = cl.cons[CPDELTA][time];
 			double sum;
@@ -973,9 +970,9 @@ void mRNA_synthesis (sim_data& sd, double** rs, con_levels& cl, st_context& stc,
 				sum = (cur_cons[cells[0]] + cur_cons[cells[1]] + cur_cons[cells[2]] + cur_cons[cells[3]] + cur_cons[cells[4]] + cur_cons[cells[5]]) / 6;
 			}
 			avg_delays[IMH1 + j] = sum;
+			// EDIT MADE NOVEMBER 8th, 2016: MERGED TWO for LOOPS ITERATING OVER THE SAME DOMAIN, BOTH ASSIGNED "int cell = old_cells_mrna[IMH1 + j];"
 		}
 	}
-	
 	// Calculate every mRNA concentration
 	for (int j = 0; j < NUM_INDICES; j++) {
 		double mtrans;
@@ -998,13 +995,13 @@ void mRNA_synthesis (sim_data& sd, double** rs, con_levels& cl, st_context& stc,
 				//cout<<"mespa"<<mtrans<<endl;
 			} else if (j == IMMESPB && sd.section == SEC_ANT) {
 				mtrans = transcription_mespb(rs, cl, WRAP(stc.time_cur - delays[j], sd.max_delay_size), old_cells_mrna[IMH1 + j], avgpd, rs[RMSH1 + j][stc.cell], oe, sd.section);
-				
+
 			} else {
 				mtrans = transcription(rs, cl, WRAP(stc.time_cur - delays[j], sd.max_delay_size), old_cells_mrna[IMH1 + j], avgpd, rs[RMSH1 + j][stc.cell], oe, sd.section);
 			}
-			
+
 		}
-		
+
 		// The current mRNA concentration's differential equation
 		cl.cons[CMH1 + j][stc.time_cur][stc.cell] =
 			cl.cons[CMH1 + j][stc.time_prev][stc.cell]
@@ -1063,7 +1060,7 @@ inline double transcription_mespa (double** rs, con_levels& cl, int time, int ce
 	tmespbmespb = rs[RCRITPMESPBMESPB][cell] == 0 ? 0 : cl.cons[CPMESPBMESPB][time][cell] / rs[RCRITPMESPBMESPB][cell];
 	//}
 	tdelta = rs[RCRITPDELTA][cell] == 0 ? 0 : avgpd / rs[RCRITPDELTA][cell];
-	
+
 	return ms * (oe + (tdelta) / (tdelta + rs[NS1][cell] * SQUARE(th1h1) + SQUARE(th7h13) + SQUARE(tmespbmespb)));
 }
 
@@ -1091,7 +1088,7 @@ inline double transcription_mespb (double** rs, con_levels& cl, int time, int ce
 	tmespbmespb = rs[RCRITPMESPBMESPB][cell] == 0 ? 0 : cl.cons[CPMESPBMESPB][time][cell] / rs[RCRITPMESPBMESPB][cell];
 	//}
 	tdelta = rs[RCRITPDELTA][cell] == 0 ? 0 : rs[NS2][cell] * avgpd / rs[RCRITPDELTA][cell];
-	
+
 	return ms * (oe + (1 + tdelta) / (1 + tdelta + SQUARE(tmespamespa) + SQUARE(tmespamespb) + SQUARE(tmespbmespb)));
 }
 
@@ -1117,7 +1114,7 @@ void calc_neighbors_1d (sim_data& sd, int neighbors[], int cell, int active_star
 		neighbors[0] = cell - 1;
 		neighbors[1] = cell + 1;
 	}
-	
+
 	neighbors[0] = WRAP(neighbors[0], sd.width_total);
 	neighbors[1] = WRAP(neighbors[1], sd.width_total);
 }
@@ -1141,7 +1138,7 @@ void calc_neighbors_1d (sim_data& sd, int neighbors[], int cell, int active_star
 		   /    \/    \/    \/    \
 		   | 12 || 13 || 14 || 15 |
 		   \____/\____/\____/\____/
-		
+
 		This function should be called only when necessary due to the time cost; the populated neighbors array should be reused until invalid.
 	todo:
 */
@@ -1257,4 +1254,3 @@ void baby_to_cl (con_levels& baby_cl, con_levels& cl, int baby_time, int time) {
 int anterior_time (sim_data& sd, int time) {
 	return time / sd.big_gran - sd.steps_til_growth / sd.big_gran + sd.max_delay_size;
 }
-
