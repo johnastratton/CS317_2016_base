@@ -55,11 +55,16 @@ int get_peaks_and_troughs1 (sim_data& sd, con_levels& cl, int actual_cell, int t
 			pos = cl.active_start_record[j] + sd.width_total - col;
 		}
 	
-		// check if the current point is a peak
+		// check if the current point is a peak and/or a trough
+		// EDIT NOVEMBER 8TH, 2016: merged for loops checking peaks and checking troughs
 		bool is_peak = true;
+		bool is_trough = true;
 		for (int k = MAX(j - (2 / sd.step_size / sd.big_gran), time_start); k <= MIN(j + 2 / sd.step_size / sd.big_gran, sd.time_end - 1); k++) {
 			if (conc[j][actual_cell] <= conc[k][actual_cell] && j!=k) {
 				is_peak = false;
+			}
+			if (conc[j][actual_cell] >= conc[k][actual_cell] && j!=k) {
+				is_trough = false;
 			}
 		}
 		if (is_peak) {
@@ -69,13 +74,6 @@ int get_peaks_and_troughs1 (sim_data& sd, con_levels& cl, int actual_cell, int t
 			num_points++;
 		}
 		
-		// check if the current point is a trough
-		bool is_trough = true;
-		for (int k = MAX(j - (2 / sd.step_size / sd.big_gran), time_start); k <= MIN(j + 2 / sd.step_size / sd.big_gran, sd.time_end - 1); k++) {
-			if (conc[j][actual_cell] >= conc[k][actual_cell] && j!=k) {
-				is_trough = false;
-			}
-		}
 		if (is_trough) {
 			crit_points[num_points] = j;
 			type[num_points] = -1;
@@ -113,12 +111,17 @@ int get_peaks_and_troughs2 (sim_data& sd, con_levels& cl, int actual_cell, int t
 		}
 	
 		// check if the current point is a peak
+		// check if the current point is a trough
+		// EDIT November 30th, 2016: Merged two loops
 		bool is_peak = true;
+		bool is_trough = true;
 		for (int k = MAX(j - (2 / sd.step_size / sd.big_gran), time_start); k <= MIN(j + 2 / sd.step_size / sd.big_gran, sd.time_end - 1); k++) {
 			if (conc[j][actual_cell] <= conc[k][actual_cell] && j!=k) {
 				is_peak = false;
-				
 			}
+			if (conc[j][actual_cell] >= conc[k][actual_cell] && j!=k) {
+				is_trough = false;
+			}	
 		}
 		if (is_peak) {
 			crit_points[num_points] = j;
@@ -127,13 +130,6 @@ int get_peaks_and_troughs2 (sim_data& sd, con_levels& cl, int actual_cell, int t
 			num_points++;
 		}
 		
-		// check if the current point is a trough
-		bool is_trough = true;
-		for (int k = MAX(j - (2 / sd.step_size / sd.big_gran), time_start); k <= MIN(j + 2 / sd.step_size / sd.big_gran, sd.time_end - 1); k++) {
-			if (conc[j][actual_cell] >= conc[k][actual_cell] && j!=k) {
-				is_trough = false;
-			}
-		}
 		if (is_trough) {
 			crit_points[num_points] = j;
 			type[num_points] = -1;
